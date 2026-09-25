@@ -1,0 +1,89 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: pulsemetrics_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pulsemetrics
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+  redis:
+    image: redis:7
+    container_name: pulsemetrics_redis
+    command: [
+        "redis-server",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        # When Redis gets full, allkeys-lru automatically deletes our oldest,
+        # least-popular or least-recently-used data to clear up space for new data.
+        # This prevents Redis from crashing or throwing "Out of Memory" errors.
+        "allkeys-lru",
+      ]
+    environment:
+      # 1. Identity & KRaft Settings (No Zookeeper required)
+      #
+      # The unique ID number for this specific computer (Broker) in the cluster
+      KAFKA_NODE_ID: 1
+      # Tells this container to wear two hats:
+      # be a broker (store/move data) AND
+      # be a controller (act as the manager/boss of the cluster).
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Tells cluster:
+      # Node 1 is listening on port 9093 to make management decisions
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # 2. Open doors inside the container to listen everywhere
+      #
+      # Listen for incoming connections from anywhere on ports 9092, 9093, and 9094.
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+
+      # 3. Dynamic External Routing (${KAFKA_HOST:-localhost} falls back to localhost if not specified)
+      #
+      # This is the "return address"
+      # Kafka hands back to our apps.
+      # If a companion app inside Docker asks for data,
+      # Kafka says: "Talk to me at kafka:9092".
+      #
+      # If an outside app (like your laptop or the internet) asks,
+      # Kafka says: "Talk to me at localhost:9094" or "our EC2 IP".
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://${KAFKA_HOST:-localhost}:9094
+
+      # 4. Map the listener names to security protocols
+      #
+      # Tells Kafka what type of security encryption to use on these ports. PLAINTEXT means "unencrypted/no password".
+      # This is perfect for local development, but you would use SSL/SASL in a real production environment.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # 5. Dev-friendly fallbacks
+      #
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      # A shortcut for development. If your Node.js app tries to send a message to a topic that doesn't exist yet,
+      # Kafka will instantly create it automatically instead of crashing with an error.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Because we are running a single broker on your laptop/EC2 (not a cluster of 3+ computers), we cannot make backups.
+      # Setting these to 1 tells Kafka: "It's okay that there is only 1 copy of the data;
+      # don't complain or throw errors looking for backup servers."
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+  kafka:
+    image: apache/kafka:latest
+    container_name: pulsemetrics_kafka
+    environment:
+      - name=value
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    restart: unless-stopped
