@@ -7,6 +7,11 @@ export const redis = createClient({
     reconnectStrategy(retries) {
       if (retries > 10) return new Error("Redis reconnect limit exceeded");
       //  Waits 100ms, then 200ms, then 400ms... up to a maximum of 3000ms
+      //
+      // retries * 100 means:
+      // Try 1: wait 100ms
+      // Try 2: wait 2000ms
+      // Try 3: wait 300ms
       return Math.min(retries * 100, 3000);
     },
   },
