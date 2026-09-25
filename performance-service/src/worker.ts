@@ -21,7 +21,7 @@
 
 import { pool } from "../../shared/db.js";
 import { kafka } from "../../shared/kafka.js";
-import { handleTrafficMessage } from "./handlers/trafficHandler.js";
+import { handlePerformanceMessage } from "./handlers/trafficHandler.js";
 
 const consumer = kafka.consumer({ groupId: "traffic-service" });
 
@@ -38,7 +38,7 @@ const startWorker = async () => {
     "🚀 Traffic worker listening continuously for incoming streams...",
   );
   await consumer.run({
-    eachMessage: handleTrafficMessage,
+    eachMessage: handlePerformanceMessage,
   });
 };
 

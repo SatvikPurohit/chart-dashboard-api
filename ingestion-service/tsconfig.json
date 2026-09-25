@@ -1,8 +1,17 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "outDir": "./dist",
+
+    /*  The Plural Fix: Virtualizes both paths into the same root folder */
+    "rootDir": "./src"
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "../shared/**/*.ts" /* Explicitly tells TS to include the shared ts files */
+  ],
+  "references": [
+    /* The Reference Fix: Point directly to the configuration file, not just the folder */
+    { "path": "../shared/tsconfig.json" }
+  ]
 }

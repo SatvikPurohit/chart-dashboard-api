@@ -1,8 +1,8 @@
 import { EachMessagePayload } from "kafkajs";
 import { PerformanceEvent } from "../types/performanceEvent.js";
-import { upsertTrafficMetric } from "../services/dbService.js";
+import { upsertPerformanceMetric } from "../services/dbService.js";
 
-export async function handleTrafficMessage({
+export async function handlePerformanceMessage({
   message,
 }: EachMessagePayload): Promise<void> {
   if (!message.value) return; // Guard clause against empty messages
@@ -21,7 +21,11 @@ export async function handleTrafficMessage({
     bucket.setSeconds(0, 0);
 
     // Save calculation out to the database service boundary
-    await upsertTrafficMetric(bucket, event.data.page);
+    await upsertPerformanceMetric(
+      bucket,
+      event.data.endpoint,
+      event.data.durationMs,
+    );
   } catch (error) {
     // Basic error reporting wrapper loop isolation
     console.error("Failed to process traffic message event stream raw:", error);

@@ -1,22 +1,25 @@
 import { pool } from "../../../shared/db.js";
 
-export const upsertTrafficMetric = async (
+export const upsertPerformanceMetric = async (
   bucket: Date,
-  page: string,
+  endpoint: string,
+  durationMs: number,
 ): Promise<void> => {
   const upsertQueryText = `
-    INSERT INTO traffic_metrics(
+    INSERT INTO performance_metrics(
         bucket,
-        page,
-        views
+        endpoint,
+        total_duration,
+        request_count
     )
     values(
         $1,
         $2,
+        $3,
         1
     )
-    ON CONFLICT(bucket, page)
-    DO UPDATE SET views =  traffic_metrics.views + 1
+    ON CONFLICT(bucket, end_point)
+    DO UPDATE SET total_duration =  performance_metrics.total_duration + EXCLUDED.total_duration
 `;
-  await pool.query(upsertQueryText, [bucket, page]);
+  await pool.query(upsertQueryText, [bucket, endpoint, durationMs]);
 };
