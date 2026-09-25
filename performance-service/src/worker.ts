@@ -1,3 +1,24 @@
+//  !! Description !!
+// Exactly what our original script is doing line-by-line:
+//
+// groupId: "traffic-service": This joins a specialized Consumer Group team.
+// If we spin up multiple instances of this worker (consumer),
+// Kafka divides the work evenly among them.
+//
+// fromBeginning: false: Tells the consumer to ignore historical data.
+// It will only process messages that arrive after the worker powers up.
+//
+// event.eventType !== "PAGE_VIEWED": This is an early guard clause filter.
+// It drops irrelevant events instantly "so they don't consume database processing time".
+//
+// bucket.setSeconds(0, 0): This rounds the timestamp down to the nearest minute (e.g., 10:14:35 becomes 10:14:00).
+// This is a classic analytics pattern called "Time-Bucket Aggregation",
+// allowing we to count views per minute.
+//
+// ON CONFLICT ... DO UPDATE: An Upsert query.
+// If a row for that specific minute and page doesn't exist, it creates it.
+// If it already exists, it increments the view count by 1.
+
 import appConfig from "./app.js";
 
 const PORT = Number(process.env.port) || 3000;

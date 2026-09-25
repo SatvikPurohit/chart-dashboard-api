@@ -3,7 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import { Producer } from "kafkajs";
 //
-import { kafka } from "../shared/kafka.js";
+import { kafka } from "../../shared/kafka.js";
 import { KafkaRequest } from "./types/kafka.js";
 import { centralErrorHandler } from "./middleware/centralErrorHandler.js";
 import eventRoutes from "./routes/eventRoutes.js";

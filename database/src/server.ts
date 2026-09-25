@@ -1,4 +1,3 @@
-import { error } from "node:console";
 import appConfig from "./app.js";
 
 const PORT = Number(process.env.port) || 3000;
