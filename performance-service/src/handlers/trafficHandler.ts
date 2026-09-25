@@ -1,5 +1,5 @@
 import { EachMessagePayload } from "kafkajs";
-import { PageViewEvent } from "../types/pageViewEvent.js";
+import { PerformanceEvent } from "../types/performanceEvent.js";
 import { upsertTrafficMetric } from "../services/dbService.js";
 
 export async function handleTrafficMessage({
@@ -9,7 +9,7 @@ export async function handleTrafficMessage({
 
   try {
     // Parse the raw Kafka binary buffer into our typed object structure
-    const event: PageViewEvent = JSON.parse(message.value.toString());
+    const event: PerformanceEvent = JSON.parse(message.value.toString());
 
     // Filter out unwanted event types early (Middleware/Guard function behavior)
     if (event.eventType !== "PAGE_VIEWED") {

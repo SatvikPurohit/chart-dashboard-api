@@ -34,9 +34,7 @@ const startWorker = async () => {
     topic: "analytics.raw",
     fromBeginning: false,
   });
-  console.log(
-    "🚀 Traffic worker listening continuously for incoming streams...",
-  );
+  console.log(" Traffic worker listening continuously for incoming streams...");
   await consumer.run({
     eachMessage: handleTrafficMessage,
   });
@@ -47,7 +45,7 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n[${signal}] Initiating worker shutdown routine...`);
 
   try {
-    // 1. Tell Kafka we are disconnecting so it rebalances the consumer group instantly
+    // 1. Tell Kafka we are disconnecting so it re-balances the consumer group instantly
     await consumer.disconnect();
     console.log("Kafka consumer disconnected cleanly.");
 

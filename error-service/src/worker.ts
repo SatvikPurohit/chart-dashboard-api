@@ -1,7 +1,7 @@
 //  !! Description !!
 // Exactly what our original script is doing line-by-line:
 //
-// groupId: "traffic-service": This joins a specialized Consumer Group team.
+// groupId: "Error-service": This joins a specialized Consumer Group team.
 // If we spin up multiple instances of this worker (consumer),
 // Kafka divides the work evenly among them.
 //
@@ -19,34 +19,45 @@
 // If a row for that specific minute and page doesn't exist, it creates it.
 // If it already exists, it increments the view count by 1.
 
-import appConfig from "./app.js";
+import { pool } from "../../shared/db.js";
+import { kafka } from "../../shared/kafka.js";
+import { handleErrorMessage } from "./handlers/errorHandler.js";
 
-const PORT = Number(process.env.port) || 3000;
-const app = appConfig();
+const consumer = kafka.consumer({ groupId: "Error-service" });
 
-// 1. Capture the server instance returned by listen
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
-});
+const startWorker = async () => {
+  console.log("Connecting Kafka consumer stream processing pipeline...");
+
+  // CONNECT< SUBSCRIBE< RUN
+  await consumer.connect();
+  await consumer.subscribe({
+    topic: "analytics.raw",
+    fromBeginning: false,
+  });
+  console.log("Error worker listening continuously for incoming streams...");
+  await consumer.run({
+    eachMessage: handleErrorMessage,
+  });
+};
 
 // 2. Create a function to handle graceful shutdown
-const gracefulShutdown = (signal: string) => {
-  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n[${signal}] Initiating worker shutdown routine...`);
 
-  server.close(() => {
-    console.log("HTTP server closed. Cleaning up database connections...");
-    // Close database connections here (e.g., prisma.\$disconnect() or mongoose.connection.close())
-    console.log("Shutdown complete. Exiting process.");
-    process.exit(0); // 0 indicates successful, planned termination
-  });
+  try {
+    // 1. Tell Kafka we are disconnecting so it re-balances the consumer group instantly
+    await consumer.disconnect();
+    console.log("Kafka consumer disconnected cleanly.");
 
-  // Force close after 10 seconds if connections are hanging
-  setTimeout(() => {
-    console.error(
-      "Could not close connections in time, forcefully shutting down",
-    );
+    // 2. Shut down the database pool to close lingering network sockets
+    await pool.end();
+    console.log("Database connection pool terminated safely.");
+
+    process.exit(0);
+  } catch (err) {
+    console.error("Error occurred during unexpected loop termination:", err);
     process.exit(1);
-  }, 10000);
+  }
 };
 
 process.on("SIGINT", () => {
@@ -54,4 +65,9 @@ process.on("SIGINT", () => {
 });
 process.on("SIGTERM", () => {
   return gracefulShutdown("SIGTERM");
+});
+
+startWorker().catch((error) => {
+  console.error("Critical worker boot fault execution crashed:", error);
+  process.exit(1);
 });

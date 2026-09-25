@@ -1,22 +1,22 @@
 import { pool } from "../../../shared/db.js";
 
-export const upsertTrafficMetric = async (
+export const upsertErrorMetric = async (
   bucket: Date,
-  page: string,
+  errorType: string,
 ): Promise<void> => {
   const upsertQueryText = `
-    INSERT INTO traffic_metrics(
+    INSERT INTO error_metrics(
         bucket,
-        page,
-        views
+        error_type,
+        count
     )
     values(
         $1,
         $2,
         1
     )
-    ON CONFLICT(bucket, page)
-    DO UPDATE SET views =  traffic_metrics.views + 1
+    ON CONFLICT(bucket, error_type)
+    DO UPDATE SET views =  error_metrics.count + 1
 `;
-  await pool.query(upsertQueryText, [bucket, page]);
+  await pool.query(upsertQueryText, [bucket, errorType]);
 };
