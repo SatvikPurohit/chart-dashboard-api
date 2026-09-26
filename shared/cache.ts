@@ -55,6 +55,58 @@ import { redis } from "./redis.js";
 //     "pulse:chart:traffic:1h"
 // );
 // EX: 30,
+//
+// Cache Avalanche (The Mass Expiry)
+// What it is: When thousands of cached keys expire at the exact same second, or if your Redis server crashes completely.
+// A massive tidal wave of user traffic bypasses the cache entirely and crushes your Postgres database, knocking it offline.
+// The Fix: TTL Jitter. Never let keys expire at a uniform time.
+// When saving data to Redis, add a random number of seconds (a "jitter") to the expiration time.
+//
+// Cache Penetration (The Non-Existent Key Attack)
+// What it is: A user requests a resource that does not exist anywhere in your system
+// (e.g., hitting /charts/traffic?userId=999999999).
+// The app checks Redis. Cache Miss!The app queries Postgres. Returns null (Nothing found).
+// Because the data is empty, the app does not cache anything.
+// If a hacker sends this request 5,000 times a second, your database runs empty queries continuously until it goes down.
+// The Fix: Negative Caching. Cache the missing value as a placeholder string (like "empty") for a brief time (e.g., 2 minutes).
+// If the user asks again, Redis intercepts it and returns a 404 instantly without touching Postgres.
+//
+//  High-Performance Operational Patterns
+// DEL vs UNLINK (Memory Management Optimization)
+// Interviewers love this because it proves you understand lower-level system resource costs.
+// DEL (Synchronous): Wipes the key out immediately. If the key holds a massive item (like a 50MB JSON array or a hash with 1 million items),
+// "DEL freezes the single-threaded" loop of Redis for several milliseconds while it reclaims the memory hardware,
+// slowing down all other traffic.
+// UNLINK (Asynchronous): Removes the key from the global directory in less than a microsecond,
+// making it look deleted instantly.
+// It then handles the heavy lifting of clearing the memory block silently inside a background worker thread,
+// keeping the main execution highway completely clear.
+// The Rule of Thumb: Use UNLINK by default for deletion routines in modern production code.
+//
+// Pipelining (Network Efficiency)
+// What it is: Normally, your app sends a request to Redis and waits for a response before sending the next one.
+// This incurs a round-trip network delay (Latency) for every line.
+// Pipelining sends a batch of commands at once over a single network package connection stream,
+// and parses the array of answers at the end.
+//
+// Concurrency Safety (Race Conditions)
+// Race Condition (The Data Overwrite)
+// What it is: When two server threads try to read, modify, and save the exact same counter
+// at the exact same millisecond.
+// If a user clicks two buttons rapidly, both servers read the value 10 from Redis simultaneously.
+// Both calculate 10 + 1 = 11, and both save 11.
+// The count becomes 11 instead of 12. You just lost an event.
+// The Fix: INCRBY (Atomic Operations)
+// Instead of fetching the number, doing math in JavaScript, and saving it back, use native Redis commands.
+// INCRBY performs the read, add, and save operations entirely inside the atomic loop of Redis.
+// It is physically impossible for a race condition to alter it.
+// OR
+// WATCH for Optimistic Concurrency
+// What it is: If you must perform a complex data change (like updating a user's wallet money array balance)
+// that can't be done with a simple INCRBY, you tell Redis to WATCH that key.
+// If any other background worker service alters that watched key while your server is preparing
+// its update transaction, Redis automatically cancels your save operation.
+// It throws an error so your app can retry safely, preventing corrupted financial data.
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -68,7 +120,7 @@ export const getWithLock = async <T>({
   key,
   ttlSeconds,
   loader,
-}: GetWithLockOptions<T>): Promise<T> => {
+}: GetWithLockOptions<T>): Promise<T | null> => {
   // Initial Quick Cache Check
   const cached = await redis.get(key);
   if (cached !== null) {
@@ -104,6 +156,7 @@ export const getWithLock = async <T>({
     try {
       // Double Check: Has another thread built the cache while we waited for the lock?
       const secondCheck = await redis.get(key);
+      if (secondCheck === "EMPTY_NOT_FOUND") return null;
       if (secondCheck !== null) {
         return JSON.parse(secondCheck) as T;
       }
@@ -111,9 +164,15 @@ export const getWithLock = async <T>({
       // Execute the database loader function
       const data = await loader();
 
+      // CACHE AVALANCHE PREVENTION (Add random TTL Jitter)
+      // (Cache Avalanche Fix)
+      // Adds a random window between 1 and 15 seconds so keys never expire together
+      const jitter = Math.floor(Math.random() * 15) + 1;
+      const finalTTL = ttlSeconds + jitter;
       // Write results to cache with provided expiration time
       await redis.set(key, JSON.stringify(data), {
-        EX: ttlSeconds,
+        EX: finalTTL,
+        // ttlSeconds,
       });
 
       return data;
@@ -126,9 +185,10 @@ export const getWithLock = async <T>({
   // Lock was busy. Poll Redis every 50ms for up to 500ms waiting for the winner to finish
   for (let attempt = 0; attempt < 10; attempt++) {
     await sleep(50);
-    const value = await redis.get(key);
-    if (value !== null) {
-      return JSON.parse(value) as T;
+    const polledValue = await redis.get(key);
+    if (polledValue === "EMPTY_NOT_FOUND") return null;
+    if (polledValue !== null) {
+      return JSON.parse(polledValue) as T;
     }
   }
 
