@@ -40,6 +40,36 @@ read -r -a INSTANCE_IDS <<< "$INSTANCE_IDS_TEXT"
 
 echo "Found ${#INSTANCE_IDS[@]} active instance(s): ${INSTANCE_IDS[*]}"
 
+# A newly launched ASG instance can be InService before its SSM agent has checked in.
+# Sending it an SSM command at that moment rejects the entire multi-instance request.
+SSM_INSTANCE_IDS=()
+PENDING_SSM_INSTANCE_IDS=()
+for INSTANCE_ID in "${INSTANCE_IDS[@]}"; do
+  PING_STATUS=$(aws ssm describe-instance-information \
+    --region "$AWS_REGION" \
+    --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+    --query 'InstanceInformationList[0].PingStatus' \
+    --output text 2>/dev/null || true)
+
+  if [ "$PING_STATUS" = "Online" ]; then
+    SSM_INSTANCE_IDS+=("$INSTANCE_ID")
+  else
+    PENDING_SSM_INSTANCE_IDS+=("$INSTANCE_ID")
+  fi
+done
+
+if [ "${#PENDING_SSM_INSTANCE_IDS[@]}" -gt 0 ]; then
+  echo "Skipping SSM-pending instance(s); rerun after their agent reports Online: ${PENDING_SSM_INSTANCE_IDS[*]}"
+fi
+
+if [ "${#SSM_INSTANCE_IDS[@]}" -eq 0 ]; then
+  echo "!!Error!!: No active ASG instances are currently online in AWS Systems Manager."
+  exit 1
+fi
+
+INSTANCE_IDS=("${SSM_INSTANCE_IDS[@]}")
+echo "Deploying to ${#INSTANCE_IDS[@]} SSM-online instance(s): ${INSTANCE_IDS[*]}"
+
 echo "Step 2: Executing remote deployment script via AWS SSM Run Command..."
 # Sends the build instructions to all target backend servers simultaneously
 # AWS SSM (Systems Manager) SSM : doesn't care about IP addresses or SSH keys. 
