@@ -1,6 +1,6 @@
 import appConfig from "./app.js";
 
-const PORT = Number(process.env.port) || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 const server = async () => {
   const { app, producer } = await appConfig();

@@ -41,9 +41,9 @@ const appConfig = async (): Promise<AppBootstrap> => {
     },
   );
 
-  //   Health
-  app.get("/heath", (req, res, next) => {
-    res.send(200).json({
+  // Health
+  app.get("/health", (req, res) => {
+    res.status(200).json({
       status: "UP",
       service: "chart-dashboard-api-ingestion-service",
     });

@@ -2,7 +2,7 @@ import { pool } from "../shared/db.js";
 import { redis } from "../shared/redis.js";
 import appConfig from "./app.js";
 
-const PORT = Number(process.env.port) || 3002;
+const PORT = Number(process.env.PORT) || 3002;
 
 const server = async () => {
   const { app } = await appConfig();
