@@ -13,6 +13,11 @@ services:
     volumes:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     restart: unless-stopped
   redis:
     image: redis:7
@@ -30,6 +35,25 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  # Applies schema updates even when the local Postgres volume already exists.
+  db-init:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: ${POSTGRES_PORT:-5432}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-pulsemetrics}
+    volumes:
+      - ./database/init.sql:/schema/init.sql:ro
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -f /schema/init.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
     networks:
       - pulse_internal_vpc
 
@@ -126,8 +150,10 @@ services:
     ports:
       - "3002:3002"
     depends_on:
-      - postgres
-      - redis
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     restart: unless-stopped
     networks:
       - pulse_internal_vpc
@@ -145,8 +171,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
       KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
     depends_on:
-      - kafka
-      - postgres
+      kafka:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - pulse_internal_vpc
@@ -164,8 +192,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
       KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
     depends_on:
-      - kafka
-      - postgres
+      kafka:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - pulse_internal_vpc
@@ -183,8 +213,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
       KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
     depends_on:
-      - kafka
-      - postgres
+      kafka:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - pulse_internal_vpc

@@ -18,8 +18,10 @@ export const upsertPerformanceMetric = async (
         $3,
         1
     )
-    ON CONFLICT(bucket, end_point)
-    DO UPDATE SET total_duration =  performance_metrics.total_duration + EXCLUDED.total_duration
+    ON CONFLICT(bucket, endpoint)
+    DO UPDATE SET
+        total_duration = performance_metrics.total_duration + EXCLUDED.total_duration,
+        request_count = performance_metrics.request_count + 1
 `;
   await pool.query(upsertQueryText, [bucket, endpoint, durationMs]);
 };

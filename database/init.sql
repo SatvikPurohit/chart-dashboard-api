@@ -1,4 +1,4 @@
-CREATE TABLE
+CREATE TABLE IF NOT EXISTS
     traffic_metrics (
         id BIGSERIAL PRIMARY KEY,
         bucket TIMESTAMPTZ NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE
         UNIQUE (bucket, page)
     );
 
-CREATE TABLE
+CREATE TABLE IF NOT EXISTS
     error_metrics (
         id BIGSERIAL PRIMARY KEY,
         bucket TIMESTAMPTZ NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE
         UNIQUE (bucket, error_type)
     );
 
-CREATE TABLE
+CREATE TABLE IF NOT EXISTS
     performance_metrics (
         id BIGSERIAL PRIMARY KEY,
         bucket TIMESTAMPTZ NOT NULL,
@@ -26,8 +26,8 @@ CREATE TABLE
         UNIQUE (bucket, endpoint)
     );
 
-CREATE INDEX idx_traffic_bucket ON traffic_metrics (bucket);
+CREATE INDEX IF NOT EXISTS idx_traffic_bucket ON traffic_metrics (bucket);
 
-CREATE INDEX idx_error_bucket ON error_metrics (bucket);
+CREATE INDEX IF NOT EXISTS idx_error_bucket ON error_metrics (bucket);
 
-CREATE INDEX idx_performance_bucket ON performance_metrics (bucket);
+CREATE INDEX IF NOT EXISTS idx_performance_bucket ON performance_metrics (bucket);
