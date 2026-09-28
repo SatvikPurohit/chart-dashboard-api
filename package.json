@@ -20,6 +20,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "kafkajs": "^2.2.4",
     "pg": "^8.23.0",
     "redis": "^6.2.1"
   }
