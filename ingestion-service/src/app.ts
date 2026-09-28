@@ -7,6 +7,7 @@ import { kafka } from "../../shared/kafka.js";
 import { KafkaRequest } from "./types/kafka.js";
 import { centralErrorHandler } from "./middleware/centralErrorHandler.js";
 import eventRoutes from "./routes/eventRoutes.js";
+import { corsOptions } from "../../shared/corsConfig.js";
 
 interface AppBootstrap {
   app: express.Application;
@@ -17,7 +18,7 @@ const appConfig = async (): Promise<AppBootstrap> => {
   const app = express();
 
   app.use(helmet()); // security headers
-  app.use(cors()); // frontend requests
+  app.use(cors(corsOptions));
 
   app.use(
     express.json({

@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 
 import chartRoutes from "./routes/dashboard-route.js";
+import { corsOptions } from "../shared/corsConfig.js";
 
 interface AppBootstrap {
   app: express.Application;
@@ -12,7 +13,7 @@ const appConfig = async (): Promise<AppBootstrap> => {
   const app = express();
 
   app.use(helmet()); // security headers
-  app.use(cors()); // frontend requests
+  app.use(cors(corsOptions));
   app.use(express.json()); // json body should be js object
 
   app.use("/charts", chartRoutes);
