@@ -1,0 +1,142 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pulse_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secure_production_db_password
+      POSTGRES_DB: pulsemetrics
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  redis:
+    image: redis:7-alpine
+    container_name: pulse_redis
+    command:
+      [
+        "redis-server",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: pulse_kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://${KAFKA_HOST:-localhost}:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  # 🚦 1. INGESTION SERVICE (Producer)
+  ingestion-service:
+    build:
+      context: ./ingestion-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3000
+      KAFKA_BROKERS: kafka:9092
+    ports:
+      - "3000:3000"
+    depends_on:
+      - kafka
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  #  2. DASHBOARD SERVICE (API Reader)
+  dashboard-service:
+    build:
+      context: ./dashboard-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      DB_HOST: postgres
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3002:3002"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  #  3. TRAFFIC SERVICE (Consumer)
+  traffic-service:
+    build:
+      context: ./traffic-service
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  #  4. ERROR SERVICE (Consumer)
+  error-service:
+    build:
+      context: ./error-service
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  #  5. PERFORMANCE SERVICE (Consumer)
+  performance-service:
+    build:
+      context: ./performance-service
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+volumes:
+  pgdata:
+
+networks:
+  pulse_internal_vpc:
+    driver: bridge
