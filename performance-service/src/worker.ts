@@ -1,7 +1,7 @@
 //  !! Description !!
 // Exactly what our original script is doing line-by-line:
 //
-// groupId: "traffic-service": This joins a specialized Consumer Group team.
+// groupId: "performance-service": This joins the performance Consumer Group team.
 // If we spin up multiple instances of this worker (consumer),
 // Kafka divides the work evenly among them.
 //
@@ -23,7 +23,7 @@ import { pool } from "../../shared/db.js";
 import { kafka } from "../../shared/kafka.js";
 import { handlePerformanceMessage } from "./handlers/trafficHandler.js";
 
-const consumer = kafka.consumer({ groupId: "traffic-service" });
+const consumer = kafka.consumer({ groupId: "performance-service" });
 
 const startWorker = async () => {
   console.log("Connecting Kafka consumer stream processing pipeline...");
@@ -35,7 +35,7 @@ const startWorker = async () => {
     fromBeginning: false,
   });
   console.log(
-    "🚀 Traffic worker listening continuously for incoming streams...",
+    "Performance worker listening continuously for incoming streams...",
   );
   await consumer.run({
     eachMessage: handlePerformanceMessage,
