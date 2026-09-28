@@ -29,7 +29,7 @@ const appConfig = async (): Promise<AppBootstrap> => {
   const producer = kafka.producer();
   await producer.connect();
 
-  // Inject your Kafka producer securely into the Request stream context
+  // Inject our Kafka producer securely into the Request stream context
   // it is saved inside req, that producer travels with the request to the next rooms.
   //
   // next() tells Express:

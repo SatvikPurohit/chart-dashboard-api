@@ -50,7 +50,7 @@ export const ingestEvent = async (
     //
     // If we put an error inside next(error)—
     // Express instantly sounds an alarm.
-    // It skips all remaining regular routes and looks for your global/central error handler at
+    // It skips all remaining regular routes and looks for our global/central error handler at
     // the absolute bottom of the file
     next(error);
   }

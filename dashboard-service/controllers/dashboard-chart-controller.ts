@@ -5,7 +5,7 @@ import { DashboardRequest } from "../types/dashboard-request.js";
 
 export const CACHE_KEY = "pulse:chart:traffic:1h";
 
-// Type definitions matching what your Postgres database returns
+// Type definitions matching what our Postgres database returns
 export interface ErrorChartRow {
   error_type: string;
   count: string;
@@ -23,7 +23,7 @@ export async function getTrafficChartData(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // Wrap your SQL command inside the loader function block
+    // Wrap our SQL command inside the loader function block
     const chartData = await getWithLock({
       key: CACHE_KEY,
       ttlSeconds: 20, // Expire data cache in 20 seconds, Keep cached data in Redis for a baseline of 20 seconds

@@ -5,13 +5,14 @@ services:
     image: postgres:16
     container_name: pulsemetrics_postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: pulsemetrics
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
     ports:
       - "5432:5432"
     volumes:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
   redis:
     image: redis:7
@@ -26,6 +27,15 @@ services:
         # This prevents Redis from crashing or throwing "Out of Memory" errors.
         "allkeys-lru",
       ]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: pulsemetrics_kafka
     environment:
       # 1. Identity & KRaft Settings (No Zookeeper required)
       #
@@ -52,38 +62,147 @@ services:
       # If a companion app inside Docker asks for data,
       # Kafka says: "Talk to me at kafka:9092".
       #
-      # If an outside app (like your laptop or the internet) asks,
+      # If an outside app (like our laptop or the internet) asks,
       # Kafka says: "Talk to me at localhost:9094" or "our EC2 IP".
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://${KAFKA_HOST:-localhost}:9094
 
       # 4. Map the listener names to security protocols
       #
       # Tells Kafka what type of security encryption to use on these ports. PLAINTEXT means "unencrypted/no password".
-      # This is perfect for local development, but you would use SSL/SASL in a real production environment.
+      # This is perfect for local development, but we would use SSL/SASL in a real production environment.
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
 
       # 5. Dev-friendly fallbacks
       #
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      # A shortcut for development. If your Node.js app tries to send a message to a topic that doesn't exist yet,
+      # A shortcut for development. If our Node.js app tries to send a message to a topic that doesn't exist yet,
       # Kafka will instantly create it automatically instead of crashing with an error.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      # Because we are running a single broker on your laptop/EC2 (not a cluster of 3+ computers), we cannot make backups.
+      # Because we are running a single broker on our laptop/EC2 (not a cluster of 3+ computers), we cannot make backups.
       # Setting these to 1 tells Kafka: "It's okay that there is only 1 copy of the data;
       # don't complain or throw errors looking for backup servers."
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     ports:
-      - "6379:6379"
-    restart: unless-stopped
-  kafka:
-    image: apache/kafka:latest
-    container_name: pulsemetrics_kafka
-    environment:
-      - name=value
-    ports:
       - "9092:9092"
       - "9094:9094"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  ingestion-service:
+    build:
+      context: ./ingestion-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-development}
+      KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - kafka
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  dashboard-service:
+    build:
+      context: ./dashboard-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "3002:3002"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  traffic-service:
+    build:
+      context: ./traffic-service
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
+      KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  error-service:
+    build:
+      context: ./error-service
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
+      KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+  performance-service:
+    build:
+      context: ./performance-service
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsemetrics}
+      KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
+
+volumes:
+  pgdata:
+  kafka_data:
+
+# networks:This tells Docker Compose:
+# "Hey, I don't want my containers just floating around randomly.
+# I want to create a dedicated, named communication space for them.
+# "pulse_internal_vpc:This is simply the custom name we chose for this private network.
+# It acts as the specific "Wi-Fi network name" (SSID) that our microservices will connect to.driver:
+# bridgeThis specifies the software engine type.
+#  A bridge driver creates an isolated software-based network link on our host machine.
+# Any container attached to this network is assigned a
+# private internal IP address (like 172.18.0.x) and can instantly talk to
+# any other container on the same network.
+networks:
+  pulse_internal_vpc:
+    driver: bridge

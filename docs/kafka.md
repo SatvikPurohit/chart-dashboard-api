@@ -75,7 +75,7 @@ Kafka is designed to be fast, durable, and fault-tolerant. The important idea is
 - A single Broker holds multiple partitions. For some partitions, that broker is the absolute boss (Leader).
 - For other partitions, that exact same broker is just a backup assistant (Follower).
 
-- 2. Looking Inside the BrokersIf you peek inside your cluster's hard drives, this is what the brokers are actually holding:
+- 2. Looking Inside the BrokersIf we peek inside our cluster's hard drives, this is what the brokers are actually holding:
 - 🖥️ Broker 1 holds:Partition 0 (MASTER) ──> Active data is written here.
 - Partition 1 (REPLICA) ──> A silent backup copy of Broker 2's data.
 - 🖥️ Broker 2 holds:Partition 1 (MASTER) ──> Active data is written here.
@@ -203,7 +203,7 @@ If the application restarts, it can continue from the last committed offset inst
 
 ### Horizontal scaling
 
-Instead of one giant queue, Kafka spreads load across partitions. That gives you:
+Instead of one giant queue, Kafka spreads load across partitions. That gives we:
 
 - higher throughput
 - more parallel processing

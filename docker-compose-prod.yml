@@ -5,9 +5,9 @@ services:
     image: postgres:16-alpine
     container_name: pulse_postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secure_production_db_password
-      POSTGRES_DB: pulsemetrics
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
     ports:
       - "5432:5432"
     volumes:
@@ -33,31 +33,31 @@ services:
     networks:
       - pulse_internal_vpc
 
-    kafka:
-      image: apache/kafka:latest
-      container_name: pulse_kafka
-      ports:
-        - "9092:9092"
-        - "9094:9094"
-      environment:
-        KAFKA_NODE_ID: 1
-        KAFKA_PROCESS_ROLES: broker,controller
-        KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-        KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-        KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
-        KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://${KAFKA_HOST:-localhost}:9094
-        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-        KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-        KAFKA_LOG_DIRS: /var/lib/kafka/data
-        KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        # FIX: Inject a static KRaft Cluster ID to allow formatting
-        CLUSTER_ID: "4L62xdwCQKWvss9EgB83wA"
-      volumes:
-        - kafka_data:/var/lib/kafka/data
-      restart: unless-stopped
-      networks:
-        - pulse_internal_vpc
+  kafka:
+    image: apache/kafka:latest
+    container_name: pulse_kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://${KAFKA_HOST:?KAFKA_HOST must be set}:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # FIX: Inject a static KRaft Cluster ID to allow formatting
+      CLUSTER_ID: "4L62xdwCQKWvss9EgB83wA"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    restart: unless-stopped
+    networks:
+      - pulse_internal_vpc
 
   #  1. INGESTION SERVICE (Producer)
   ingestion-service:
@@ -66,7 +66,8 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: 3000
-      KAFKA_BROKERS: kafka:9092
+      NODE_ENV: ${NODE_ENV:-production}
+      KAFKA_BROKER: ${KAFKA_BROKER:?KAFKA_BROKER must be set}
     ports:
       - "3000:3000"
     depends_on:
@@ -82,8 +83,13 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: 3002
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379
+      NODE_ENV: ${NODE_ENV:-production}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
     ports:
       - "3002:3002"
     depends_on:
@@ -99,8 +105,13 @@ services:
       context: ./traffic-service
       dockerfile: Dockerfile
     environment:
-      DB_HOST: postgres
-      KAFKA_BROKERS: kafka:9092
+      NODE_ENV: ${NODE_ENV:-production}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      KAFKA_BROKER: ${KAFKA_BROKER:?KAFKA_BROKER must be set}
     depends_on:
       - kafka
       - postgres
@@ -114,8 +125,13 @@ services:
       context: ./error-service
       dockerfile: Dockerfile
     environment:
-      DB_HOST: postgres
-      KAFKA_BROKERS: kafka:9092
+      NODE_ENV: ${NODE_ENV:-production}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      KAFKA_BROKER: ${KAFKA_BROKER:?KAFKA_BROKER must be set}
     depends_on:
       - kafka
       - postgres
@@ -129,8 +145,13 @@ services:
       context: ./performance-service
       dockerfile: Dockerfile
     environment:
-      DB_HOST: postgres
-      KAFKA_BROKERS: kafka:9092
+      NODE_ENV: ${NODE_ENV:-production}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      KAFKA_BROKER: ${KAFKA_BROKER:?KAFKA_BROKER must be set}
     depends_on:
       - kafka
       - postgres
@@ -140,6 +161,7 @@ services:
 
 volumes:
   pgdata:
+  kafka_data:
 
 networks:
   pulse_internal_vpc:
