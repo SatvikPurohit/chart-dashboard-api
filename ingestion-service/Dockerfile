@@ -1,18 +1,18 @@
-# apps/[service-name]/Dockerfile
+# Build from the repository root so the service can compile shared TypeScript modules.
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json tsconfig*.json ./
-COPY src/ ./src
-COPY ../shared/ ../shared
-RUN npm ci && npm run build
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npx tsc --ignoreConfig --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node --outDir /app/build --rootDir /app $(find ingestion-service/src -name '*.ts')
+RUN npm prune --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package*.json ./
-RUN npm ci --only=production
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/build ./build
 
-# Ingestion-service exposes 3000 | Dashboard-service exposes 3002 [M5]
-EXPOSE 3000 
-CMD ["node", "dist/server.js"]
+# Ingestion-service exposes port 3000.
+EXPOSE 3000
+CMD ["node", "build/ingestion-service/src/server.js"]

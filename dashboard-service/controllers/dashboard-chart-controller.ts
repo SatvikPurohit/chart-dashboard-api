@@ -69,7 +69,7 @@ export async function getErrorChart(
           GROUP BY error_type
           ORDER BY count DESC
         `);
-        return rows.length === 0 ? null : rows;
+        return rows;
       },
     });
 
@@ -100,7 +100,7 @@ export async function getPerformanceChart(
           GROUP BY bucket
           ORDER BY bucket
         `);
-        return rows.length === 0 ? null : rows;
+        return rows;
       },
     });
 

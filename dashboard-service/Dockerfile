@@ -1,24 +1,18 @@
-# apps/[service-name]/Dockerfile
-# Step 1 (The Builder): It brings in the raw code (TypeScript) and heavy development tools. 
-# It builds the project into a finished, ready-to-run format (JavaScript).
+# Dashboard sources live at this directory's root, not in a src folder.
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json tsconfig*.json ./
-COPY src/ ./src
-COPY ../shared/ ../shared
-RUN npm ci && npm run build
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npx tsc --ignoreConfig --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck --types node --outDir /app/build --rootDir /app $(find dashboard-service -name '*.ts')
+RUN npm prune --omit=dev
 
-# Step 2 (The Final Container): It throws away the heavy tools and messy source code. 
-# It only copies the finished application and the bare essentials needed to run it.
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package*.json ./
-RUN npm ci --only=production
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/build ./build
 
-# Ingestion-service exposes 3000 | Dashboard-service exposes 3002 [M5]
-EXPOSE 3002 
-CMD ["node", "dist/server.js"]
-
-
+# Dashboard-service exposes port 3002.
+EXPOSE 3002
+CMD ["node", "build/dashboard-service/server.js"]
