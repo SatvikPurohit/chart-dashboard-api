@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Refreshes the dashboard's demo metric buckets on every Pulse Dashboard ASG instance.
+
+Parameters:
+  AutoScalingGroupName:
+    Type: String
+    Default: dashboard-charts-pulse-auto-scaling-group
+  ProjectDirectory:
+    Type: String
+    Default: /home/ubuntu/pulse-dashboard
+
+Resources:
+  DemoMetricsSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RunDemoMetricsSeeder
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+
+  DemoMetricsSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Add missing demo metric buckets every 10 minutes; this keeps every chart filter populated.
+      ScheduleExpression: rate(10 minutes)
+      State: ENABLED
+      Targets:
+        - Id: SeedDemoMetricsOnEveryBackend
+          Arn: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+          RoleArn: !GetAtt DemoMetricsSchedulerRole.Arn
+          RunCommandParameters:
+            RunCommandTargets:
+              - Key: tag:aws:autoscaling:groupName
+                Values:
+                  - !Ref AutoScalingGroupName
+          Input: !Sub |
+            {"commands":["cd ${ProjectDirectory} && sudo docker compose --env-file .env.prod -f docker-compose-prod.yml run --rm --no-deps demo-metrics-seeder"]}
+
+Outputs:
+  ScheduleName:
+    Value: !Ref DemoMetricsSchedule
+  SchedulerRoleArn:
+    Value: !GetAtt DemoMetricsSchedulerRole.Arn

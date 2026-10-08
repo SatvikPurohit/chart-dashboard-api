@@ -57,6 +57,24 @@ services:
     networks:
       - pulse_internal_vpc
 
+  demo-metrics-seeder:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: ${POSTGRES_PORT:-5432}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-pulsemetrics}
+    volumes:
+      - ./database/seed-demo-metrics.sql:/seed/seed-demo-metrics.sql:ro
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -f /seed/seed-demo-metrics.sql"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - pulse_internal_vpc
+
   kafka:
     image: apache/kafka:latest
     container_name: pulsemetrics_kafka
@@ -151,6 +169,8 @@ services:
       - "3002:3002"
     depends_on:
       db-init:
+        condition: service_completed_successfully
+      demo-metrics-seeder:
         condition: service_completed_successfully
       redis:
         condition: service_started

@@ -1,5 +1,32 @@
 # Kafka: simple mental model
 
+## Code notes: the event pipeline
+
+`ingestion-service/src/controllers/eventController.ts` adds server-owned metadata and sends every accepted event to the raw analytics topic:
+
+```ts
+const event = {
+  eventId: crypto.randomUUID(),
+  eventVersion: 1,
+  timestamp: new Date().toISOString(),
+  eventType,
+  userId: userId ?? null,
+  data,
+};
+
+await req.kafkaProducer?.send({
+  topic: "analytics.raw",
+  messages: [{ key: userId ?? event.eventId, value: JSON.stringify(event) }],
+});
+```
+
+Each consumer rejects a message whose `eventType` is not relevant to its metric before it touches Postgres. It then rounds the event timestamp to a minute bucket and performs the database upsert described in [db.md](db.md). Consumers use a stable `groupId`; multiple copies of the same worker share partitions, while the traffic, error, and performance services each consume independently.
+
+```ts
+const consumer = kafka.consumer({ groupId: "traffic-service" });
+await consumer.subscribe({ topic: "analytics.raw", fromBeginning: false });
+```
+
 ## The big picture
 
 Think of Kafka as a highly organized message warehouse.

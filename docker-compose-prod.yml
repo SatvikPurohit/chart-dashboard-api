@@ -40,6 +40,24 @@ services:
     networks:
       - pulse_internal_vpc
 
+  demo-metrics-seeder:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: ${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      PGUSER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      PGDATABASE: ${POSTGRES_DB:?POSTGRES_DB must be set}
+    volumes:
+      - ./database/seed-demo-metrics.sql:/seed/seed-demo-metrics.sql:ro
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -f /seed/seed-demo-metrics.sql"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - pulse_internal_vpc
+
   redis:
     image: redis:7-alpine
     container_name: pulse_redis
@@ -118,6 +136,8 @@ services:
       - "3002:3002"
     depends_on:
       db-init:
+        condition: service_completed_successfully
+      demo-metrics-seeder:
         condition: service_completed_successfully
       redis:
         condition: service_started
